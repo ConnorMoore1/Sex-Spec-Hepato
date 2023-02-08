@@ -1,0 +1,153 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())
+```
+
+```{r Significant GSE130991}
+
+options(java.parameters = "-Xmx1024m")
+
+library(dplyr)
+library(ggplot2)
+library(xlsx)
+library(tidyr)
+library(scales)
+library(ggplot2)
+library(randomForest)
+library(readxl)
+
+library(grid)
+library(gridExtra)
+library(lattice)
+library(ggpubr)
+library(cowplot)
+library(forcats)
+
+library(ggnewscale)
+
+
+GSE130991.random <- readxl::read_xlsx(path= "C:/Users/cmoor/Documents/Papin Lab/Human1/GSE130991_random.xlsx", 
+                                   sheet = 1, 
+                                   col_names = FALSE)
+colnames(GSE130991.random)[1:1000] <- paste0('X',c(1:1000))
+  
+# colnames are 1:1000
+# Need to read in some example task data for task names
+GSE130991.MF = read.xlsx(file = "C:/Users/cmoor/Documents/Papin Lab/Human1/GSE130991_allGenes.xlsx", sheetIndex = 1, header = 0)
+colnames(GSE130991.MF) = c('ID','description','taskScore','significance')
+
+GSE130991.random <- cbind(GSE130991.MF %>% dplyr::select(ID, description), GSE130991.random)
+
+# Pick out the TIDEs from GSE5406
+GSE130991.MF <- GSE130991.MF %>% 
+  mutate(significance = ifelse(abs(significance) > 0.025, 0, ifelse(significance < 0, -1, 1))) %>% 
+  dplyr::select(ID, description, taskScore, significance)
+
+
+write.xlsx(GSE130991.MF, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/GSE130991_SignificantTasks.xlsx")
+
+
+
+```
+
+
+
+```{r Significant GSE130991}
+
+options(java.parameters = "-Xmx1024m")
+
+library(dplyr)
+library(ggplot2)
+library(xlsx)
+library(tidyr)
+library(scales)
+library(ggplot2)
+library(randomForest)
+library(readxl)
+
+library(grid)
+library(gridExtra)
+library(lattice)
+library(ggpubr)
+library(cowplot)
+library(forcats)
+
+library(ggnewscale)
+
+
+GSE36059.random <- readxl::read_xlsx(path= "C:/Users/cmoor/Documents/Papin Lab/Human1/GSE36059_random.xlsx", 
+                                   sheet = 1, 
+                                   col_names = FALSE)
+colnames(GSE36059.random)[1:1000] <- paste0('X',c(1:1000))
+  
+# colnames are 1:1000
+# Need to read in some example task data for task names
+GSE5406.MF = read.xlsx(file = "C:/Users/cmoor/Documents/Papin Lab/Human1/GSE36059_allGenes.xlsx", sheetIndex = 1, header = 0)
+colnames(GSE5406.MF) = c('ID','description','taskScore','significance')
+
+GSE36059.random <- cbind(GSE5406.MF %>% dplyr::select(ID, description), GSE36059.random)
+
+# Pick out the TIDEs from GSE5406
+GSE5406.MF <- GSE5406.MF %>% 
+  mutate(significance = ifelse(abs(significance) > 0.025, 0, ifelse(significance < 0, -1, 1))) %>% 
+  dplyr::select(ID, description, taskScore, significance)
+
+
+write.xlsx(GSE5406.MF, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/SignificantTasksKidney.xlsx")
+
+
+
+```
+
+
+```{r Significant GSE5281}
+
+options(java.parameters = "-Xmx1024m")
+
+library(dplyr)
+library(ggplot2)
+library(xlsx)
+library(tidyr)
+library(scales)
+library(ggplot2)
+library(randomForest)
+library(readxl)
+
+library(grid)
+library(gridExtra)
+library(lattice)
+library(ggpubr)
+library(cowplot)
+library(forcats)
+
+library(ggnewscale)
+
+
+GSE5281.random <- readxl::read_xlsx(path= "C:/Users/cmoor/Documents/Papin Lab/Human1/GSE5281_random.xlsx", 
+                                   sheet = 1, 
+                                   col_names = FALSE)
+colnames(GSE5281.random)[1:1000] <- paste0('X',c(1:1000))
+  
+# colnames are 1:1000
+# Need to read in some example task data for task names
+GSE5281.MF = read.xlsx(file = "C:/Users/cmoor/Documents/Papin Lab/Human1/GSE5281_allGenes.xlsx", sheetIndex = 1, header = 0)
+colnames(GSE5281.MF) = c('ID','description','taskScore','significance')
+
+GSE5281.random <- cbind(GSE5281.MF %>% dplyr::select(ID, description), GSE5281.random)
+
+# Pick out the TIDEs from GSE5406
+GSE5281.MF <- GSE5281.MF %>% 
+  mutate(significance = ifelse(abs(significance) > 0.025, 0, ifelse(significance < 0, -1, 1))) %>% 
+  dplyr::select(ID, description, taskScore, significance)
+
+
+write.xlsx(GSE5281.MF, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/SignificantTasksBrain.xlsx")
+
+
+
+```

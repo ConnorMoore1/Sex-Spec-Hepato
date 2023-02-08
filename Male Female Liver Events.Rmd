@@ -1,0 +1,93 @@
+---
+title: "AERS Project 1"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())
+```
+
+
+```{r loadin}
+library(readxl)
+
+
+samps = read_excel('C:/Users/cmoor/Documents/Class/BME 6311/Project 1/Project 1 AERS.xlsx', col_names = T)
+
+ProjData = samps[, 2:6]
+rownames(ProjData) = samps$...1
+
+```
+
+```{r combine}
+
+combined = data.frame(matrix(NA, nrow = nrow(ProjData), ncol = 2))
+
+combined[,1] = (ProjData$`Male Young Adult`+ProjData$`Male Adult`)/ProjData$`Total Reports`
+combined[,2] = (ProjData$`Female Young Adult`+ProjData$`Female Adult`)/ProjData$`Total Reports`
+
+rownames(combined) = samps$...1
+colnames(combined) = c("Male", "Female")
+
+boxp = data.frame(matrix(NA, nrow = 2*nrow(ProjData), ncol = 2))
+
+boxp[1:nrow(combined),1] = combined$Male
+boxp[1:nrow(combined),2] = "Male"
+boxp[(nrow(combined)+1):nrow(boxp),1] = combined$Female
+boxp[(nrow(combined)+1):nrow(boxp),2] = "Female"
+
+colnames(boxp) = c("Data", "Sex")
+
+```
+
+```{r Vis}
+library(ggplot2)
+library(ggsignif)
+
+
+ggplot(boxp, aes(x=as.factor(Sex), y=Data*100, fill=as.factor(Sex))) +
+geom_boxplot(outlier.shape = NA) +
+  geom_signif(comparisons = list(c("Male", "Female")), 
+              map_signif_level=TRUE) +
+  guides(fill=guide_legend(title="Sex")) + xlab("") + ggtitle("Sex Difference in Occurance of AERS Reports") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))+
+  theme(axis.text = element_text(size = 30)) +
+  theme(axis.title = element_text(size = 22, face = "bold")) +
+  theme(plot.title = element_text(size = 26)) +
+  theme(legend.text = element_text(size = 24)) +
+  theme(legend.title = element_text(size = 28, face = "bold")) + ylab("Percent of Total Quaterly Reports") +theme(plot.title = element_text(face = "bold")) +geom_point(aes(fill = as.factor(Sex)), size = 4, shape = 21, position = position_jitterdodge(jitter.width = .5)) +
+    scale_fill_brewer(palette="Set2")+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+
+```
+
+
+```{r with time}
+library(ggplot2)
+
+ggplot(combined, aes(x = rownames(combined))) +
+  geom_point(aes(y = 100*Male, color = "Male", size = 3))+
+  geom_point(aes(y = 100*Female, color = "Female", size = 3))+
+  guides(fill=guide_legend(title="Sex"))+
+  labs(color = "Sex")+ xlab("Quarter") + ggtitle("Liver-Related Reports over Time") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))+
+  theme(axis.text = element_text(size = 30)) +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
+  theme(axis.title = element_text(size = 26, face = "bold")) +
+  theme(plot.title = element_text(size = 30)) +
+  theme(legend.text = element_text(size = 24)) +
+  theme(legend.title = element_text(size = 28, face = "bold"))+ 
+  ylab("Percent of Total Quaterly Reports") +
+  scale_size(guide = "none") +
+  scale_color_brewer(palette="Set2")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))+
+  guides(colour = guide_legend(override.aes = list(size=3)))
+
+
+nrow(combined[combined$Male<combined$Female,])/nrow(combined)
+```
+
+
+
