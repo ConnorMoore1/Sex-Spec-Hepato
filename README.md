@@ -1,2 +1,2 @@
 # Sex-Spec-Hepato
-Code containing the analysis for "Metabolic modeling of sex-specific tissue predicts mechanisms of differences in toxicological responses"
+Code containing the analysis for "Metabolic modeling of sex-specific liver tissue suggests mechanism of differences in toxicological responses"
