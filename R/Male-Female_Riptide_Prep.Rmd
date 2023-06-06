@@ -1,0 +1,279 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())
+```
+
+
+
+```{r Expression XL}
+#   Data plots for selected GEO samples
+library(GEOquery)
+
+# load series and platform data from GEO
+
+gset <- getGEO("GSE130991", GSEMatrix =TRUE, getGPL=FALSE)
+if (length(gset) > 1) idx <- grep("GPL20265", attr(gset, "names")) else idx <- 1
+gset <- gset[[idx]]
+
+
+# Remove statin
+gse_data_statin = gset[,gset$`statin treatment:ch1` == "No Statin"]
+
+# Remove <18 and >50
+gse_data_statin_age = gse_data_statin[,gse_data_statin$`age:ch1`>18]
+gse_data_statin_age = gse_data_statin[,gse_data_statin$`age:ch1`<50]
+
+
+# Assign expression matrix
+ex <- exprs(gse_data_statin_age)
+
+# Write to excel
+write.table(ex, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Degs/GSE130991_Abundance.csv", 
+            col.names = TRUE, row.names = FALSE, sep = ",")
+```
+
+
+```{r Map}
+library(biomaRt)
+library(dplyr)
+library(openxlsx)
+
+# Translate transcript IDs to ENSEMBL
+mart <- useMart("ENSEMBL_MART_ENSEMBL")
+mart <- useDataset("hsapiens_gene_ensembl", mart)
+annotLookup <- getBM(
+  mart=mart,
+  attributes=c(
+    "affy_hta_2_0",
+    "ensembl_gene_id",
+    "gene_biotype",
+    "external_gene_name"),
+  filter = "affy_hta_2_0",
+  values = gsub("hg.1", "hg", rownames(ex)), uniqueRows=TRUE)
+
+# Rename colummns and clear NAs
+gene.data <- annotLookup
+colnames(gene.data) <- c('ID','ENSEMBL', 'GENETYPE','GENENAME')
+gene.data <- gene.data %>% 
+  filter(ENSEMBL != "NA")
+
+# Get list of transcript IDs
+probes = as.data.frame(rownames(ex))
+colnames(probes) = "affy_hta_2_0"
+probes = as.data.frame(gsub("hg.1","hg", probes$affy_hta_2_0))
+colnames(probes) = "affy_hta_2_0"
+
+# Merge
+probe2gene = inner_join(probes, annotLookup)
+
+# Get genes in Human1
+genes_in_model <- openxlsx::read.xlsx("C:/Users/cmoor/Documents/Papin Lab/Human1/Human-GEM.xlsx", sheet = 4) #%>% 
+genes_in_model = genes_in_model[,c(2,3)]
+colnames(genes_in_model) = c("ensembl_gene_id", "MIRIAM")
+
+# Merge
+probe2gene_model = inner_join(probe2gene, genes_in_model)
+
+# Make matrix a df
+ex_df = as.data.frame(ex)
+
+
+# Get expression for all transcripts related to each gene
+storage = data.frame(matrix(NA, nrow = nrow(probe2gene_model), ncol = ncol(ex)))
+for (i in 1:nrow(probe2gene_model)){
+  
+  storage[i,] = ex_df[grep(probe2gene_model$affy_hta_2_0[i], rownames(ex_df)),]
+  
+}
+
+# Create empty df
+AbundanceAll = data.frame(matrix(NA, nrow = nrow(probe2gene_model), ncol = ncol(ex)+1))
+
+# Assign abundances
+AbundanceAll[,2:(ncol(ex)+1)] = storage
+AbundanceAll[,1] = probe2gene_model$ensembl_gene_id
+colnames(AbundanceAll)[2:(ncol(ex)+1)] = colnames(ex_df)
+colnames(AbundanceAll)[1] = "ENSEMBL_ID"
+```
+
+```{r separate by sex}
+
+# Create sex vector
+sex_class = gse_data_statin_age$`gender:ch1`
+
+# Separate male and female samples
+Abund_Male = AbundanceAll[,grep("Male", sex_class)+1]
+Abund_Female = AbundanceAll[,grep("Female", sex_class)+1]
+
+# Create empty df
+Abund_Male_Avg = data.frame(matrix(NA, nrow = length(unique(probe2gene_model$ensembl_gene_id)), ncol = 1))
+
+# Loop through each ENSEMBL ID and average all transcripts for that ID for all samples
+for (i in 1:length(unique(probe2gene_model$ensembl_gene_id))){
+  
+  Abund_Male_Avg[i,1] = mean(as.matrix(Abund_Male[grep(unique(probe2gene_model$ensembl_gene_id)[i],AbundanceAll$ENSEMBL_ID),]))
+  
+}
+
+# Name rows and columns
+colnames(Abund_Male_Avg) = "Mean"
+rownames(Abund_Male_Avg) = unique(probe2gene_model$ensembl_gene_id)
+
+
+# Create empty df
+Abund_Female_Avg = data.frame(matrix(NA, nrow = length(unique(probe2gene_model$ensembl_gene_id)), ncol = 1))
+
+# Loop through each ENSEMBL ID and average all transcripts for that ID for all samples
+for (i in 1:length(unique(probe2gene_model$ensembl_gene_id))){
+  
+  Abund_Female_Avg[i,1] = mean(as.matrix(Abund_Female[grep(unique(probe2gene_model$ensembl_gene_id)[i],AbundanceAll$ENSEMBL_ID),]))
+  
+}
+
+# Name rows and columns
+colnames(Abund_Female_Avg) = "Mean"
+rownames(Abund_Female_Avg) = unique(probe2gene_model$ensembl_gene_id)
+
+
+
+# Create empty df
+Abund_Male_Unique = data.frame(matrix(NA, nrow = length(unique(probe2gene_model$ensembl_gene_id)), ncol = ncol(Abund_Male)))
+
+# Loop through each patient and take max transcript ID for each ENSEMBL ID
+for (i in 1:length(unique(probe2gene_model$ensembl_gene_id))){
+  for(j in 1:ncol(Abund_Male_Unique)){
+  
+    Abund_Male_Unique[i,j] = max(as.matrix(Abund_Male[grep(unique(probe2gene_model$ensembl_gene_id)[i],AbundanceAll$ENSEMBL_ID),j]))
+  }
+}
+
+# Name rows and columns
+colnames(Abund_Male_Unique) = colnames(Abund_Male)
+rownames(Abund_Male_Unique) = unique(probe2gene_model$ensembl_gene_id)
+
+
+# Create empty df
+Abund_Female_Unique = data.frame(matrix(NA, nrow = length(unique(probe2gene_model$ensembl_gene_id)), ncol = ncol(Abund_Female)))
+
+# Loop through each patient and take max transcript ID for each ENSEMBL ID
+for (i in 1:length(unique(probe2gene_model$ensembl_gene_id))){
+  for(j in 1:ncol(Abund_Female_Unique)){
+  
+    Abund_Female_Unique[i,j] = max(as.matrix(Abund_Female[grep(unique(probe2gene_model$ensembl_gene_id)[i],AbundanceAll$ENSEMBL_ID),j]))
+  }
+}
+
+# Name rows and columns
+colnames(Abund_Female_Unique) = colnames(Abund_Female)
+rownames(Abund_Female_Unique) = unique(probe2gene_model$ensembl_gene_id)
+
+
+# Write all to tsvs
+write.table(Abund_Male_Unique, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Liver Riptide/GSE130991_Abundance_18-50_No_Statin_Male_Unique.tsv", 
+            col.names = F, row.names = T, sep = "\t")
+write.table(Abund_Female_Unique, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Liver Riptide/GSE130991_Abundance_18-50_No_Statin_Female_Unique.tsv", 
+            col.names = F, row.names = T, sep = "\t")
+
+write.table(AbundanceAll, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Liver Riptide/GSE130991_Abundance_18-50_No_Statin_All.tsv", 
+            col.names = F, row.names = FALSE, sep = "\t")
+
+write.table(Abund_Male, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Liver Riptide/GSE130991_Abundance_18-50_No_Statin_Male.tsv", 
+            col.names = F, row.names = T, sep = "\t")
+write.table(Abund_Female, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Liver Riptide/GSE130991_Abundance_18-50_No_Statin_Female.tsv", 
+            col.names = F, row.names = T, sep = "\t")
+
+write.table(Abund_Male_Avg, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Liver Riptide/GSE130991_Abundance_18-50_No_Statin_Male_Avg.tsv", 
+            col.names = F, row.names = T, sep = "\t")
+write.table(Abund_Female_Avg, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Liver Riptide/GSE130991_Abundance_18-50_No_Statin_Female_Avg.tsv", 
+            col.names = F, row.names = T, sep = "\t")
+
+```
+
+
+```{r sample compare}
+# AFTER RIPTIDE IS RUN
+library(openxlsx)
+library(dplyr)
+library(ggplot2)
+
+# Load all average female and male samples
+Male_Samp <- openxlsx::read.xlsx("C:/Users/cmoor/Documents/Papin Lab/Human1/Liver Riptide/Samples/Male/Male_Liver_18-50_No_Statin_Avg.xlsx", sheet = 1)[,-1]
+Female_Samp <- openxlsx::read.xlsx("C:/Users/cmoor/Documents/Papin Lab/Human1/Liver Riptide/Samples/Female/Female_Liver_18-50_No_Statin_Avg.xlsx", sheet = 1)[,-1]
+
+# Join back together
+combined =full_join(Male_Samp, Female_Samp)
+
+# Assign NAs as 0
+combined[is.na(combined)] <- 0
+
+# Assign samples as male and female
+gender = data.frame(matrix(NA, nrow = 1000, ncol = 1))
+gender[1:500,] = "Male"
+gender[501:1000,] = "Female"
+colnames(gender) = "gender"
+gender$gender = as.factor(gender$gender)
+
+```
+```{r splitting reactions}
+library(ggplot2)
+library(ggsignif)
+
+# Load in rxns in Human1
+rxns_in_model <- openxlsx::read.xlsx("C:/Users/cmoor/Documents/Papin Lab/Human1/Human-GEM.xlsx", sheet = 1)
+
+
+# Get information for all reactions in the model
+TopX = ncol(combined)
+all_rxns = data.frame(matrix(NA, nrow = TopX, ncol = 3))
+
+for(i in c(1:4608,4610:TopX)){
+  
+  all_rxns[i,1] = rxns_in_model$ID[grep(colnames(combined)[i], rxns_in_model$ID)]
+  all_rxns[i,2] = rxns_in_model$EQUATION[grep(colnames(combined)[i], rxns_in_model$ID)]
+  all_rxns[i,3] = rxns_in_model$SUBSYSTEM[grep(colnames(combined)[i], rxns_in_model$ID)]
+  
+}
+
+
+# Look at PPP-related reactions
+subsystem = "pentose phosphate pathway"
+subidx = grep(subsystem, all_rxns$X3, ignore.case = T)
+rxnid = all_rxns$X1[subidx]
+
+# Plot each reaction with male and female samples
+for(i in 1:length(subidx)){
+  
+
+  print(ggplot(combined, aes(x=gender$gender,combined[,grep(rxnid[i], colnames(combined))], fill = gender$gender)) +
+  geom_boxplot(outlier.shape = 21, outlier.size = 14, outlier.stroke =2) +
+  geom_signif(comparisons = list(c("Male", "Female")), 
+              map_signif_level=TRUE, textsize=8) +
+  guides(fill=guide_legend(title="Sex")) + xlab("") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))+
+  theme(axis.text = element_text(size = 32)) +
+  theme(axis.title = element_text(size = 32, face = "bold")) +
+  theme(plot.title = element_text(size = 32)) +
+  theme(legend.text = element_text(size = 32)) +
+  theme(legend.title = element_text(size = 32, face = "bold")) + ylab("Flux") +theme(plot.title = element_text(face = "bold")) +geom_point(aes(fill = gender$gender), size = 14, shape = 21, position = position_jitterdodge(jitter.width = .5), stroke =2) +
+    scale_fill_brewer(palette="Set2")+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))+
+    theme(plot.title = element_text(hjust = 0.5))+
+  theme(axis.text = element_text(size = 32)) +
+  theme(axis.title = element_text(size = 32, face = "bold")) +
+  theme(plot.title = element_text(size = 32, face = "bold")) +
+  theme(legend.text = element_text(size = 32)) +
+  theme(legend.title = element_text(size = 32, face = "bold")))
+
+  
+}
+
+
+```
+
+
+
