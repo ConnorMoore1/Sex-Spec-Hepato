@@ -49,22 +49,26 @@ boxplot(log2(exprs(gse_data)))
 ```
 
 ```{r analyze}
-
+# Take control samples
 gse_data = gse_data[,grep("control", gse_data$title)]
 
+# Assign male and female vectors
 gender_state <- data.frame(gse_data$characteristics_ch1.9) %>% 
   mutate(Male = grepl(" male", gse_data$characteristics_ch1.9, ignore.case = T), 
          Female = grepl("female", gse_data$characteristics_ch1.9, ignore.case = T)) %>% 
   mutate(Summary = ifelse(Female ==TRUE, "Female", ifelse(Male == TRUE & Female == FALSE, "Male", "")))
 
+# Create contrast matrix
 design <- model.matrix(~0 + factor(gender_state$Summary))
 colnames(design) <- c("Male","Female")
 contrast.matrix <- makeContrasts(Male - Female, levels = design)
 
+# Load in transcript IDs
 gset <- getGEO("GSE5281", GSEMatrix =TRUE, getGPL=FALSE)
 if (length(gset) > 1) idx <- grep("GPL570", attr(gset, "names")) else idx <- 1
 gset <- gset[[idx]]
 
+# Translate transcript IDs to ENSEMBL IDs
 mart <- useMart("ENSEMBL_MART_ENSEMBL")
 mart <- useDataset("hsapiens_gene_ensembl", mart)
 annotLookup <- getBM(
@@ -77,9 +81,6 @@ annotLookup <- getBM(
   filter = "affy_hg_u133_plus_2",
   values = rownames(exprs(gset)), uniqueRows=TRUE)
 
-USP9Ylevels = as.data.frame(log2(gse_data@assayData$exprs[grep("206624_at", rownames(gse_data@assayData$exprs)),])) #USP9Y - GENE NAME
-hist(USP9Ylevels[,1])
-#sd(USP9Ylevels[,1])
 
 ```
 
@@ -88,7 +89,7 @@ hist(USP9Ylevels[,1])
 library(genefilter)
 gse_data_filter <- varFilter(gse_data)
 
-
+# Rename columns and remove NAs
 gene.data <- annotLookup
 colnames(gene.data) <- c('ID','ENSEMBL', 'GENETYPE','GENENAME')
 gene.data <- gene.data %>% 
@@ -132,25 +133,32 @@ all.results <- all.results %>%
 all.data <- all.results
 colnames(all.data)[1] <- 'GENE.NAME'
 
+# See how many DEGs in male and female
 all.data %>% group_by(Male) %>% dplyr::count()
 all.data %>% group_by(Female) %>% dplyr::count()
 
+# Write to csv
 write.table(all.data, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Degs/GSE5281_DEGs.csv", 
             col.names = TRUE, row.names = FALSE, sep = ",")
 
 # Determine how many DEGs map to the model
 genes_in_model <- openxlsx::read.xlsx("C:/Users/cmoor/Documents/Papin Lab/Human1/Human-GEM.xlsx", sheet = 4)
 
+# Map transcript ID to ENSEMBL ID
 model.genes.data <- genes_in_model %>% 
   inner_join(all.data, by = c("NAME" = "ENSEMBL"))
 
+# Clean up data frame
 model.genes.data = model.genes.data[,-c(1,3,4,5,7)]
 
+# Assign logFC to 0 if not a DEG
 model.genes.data$logFC[model.genes.data$adj.P.Val>0.1] = 0
 
+# Write to csv
 write.table(model.genes.data, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Degs/Human1_GSE5281_DEGs.csv", 
             col.names = TRUE, row.names = FALSE, sep = ",")
 
+# See how many DEGs in the model are upregulated in male and female
 model.genes.data %>% group_by(Male == 0) %>% dplyr::count()
 model.genes.data %>% group_by(Female == 0) %>% dplyr::count()
 ```
