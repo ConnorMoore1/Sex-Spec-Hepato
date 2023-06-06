@@ -2,10 +2,10 @@ import cobra
 import riptide
 import pandas
 
-model = cobra.io.load_yaml_model("C:/Users/cmoor/Documents/Papin Lab/Human1/Human-GEM.yml")
+model = cobra.io.load_yaml_model("Human-GEM.yml")
 
 solo2 = {}
-with open('C:/Users/cmoor/Documents/Papin Lab/Human1/Liver Riptide/GSE130991_Abundance_Male_Avg.tsv', 'r') as transcription:
+with open('GSE130991_Abundance_18-50_No_Statin_Male_Avg.tsv', 'r') as transcription:
     for line in transcription:
         line = line.split()
         abunds = float(line[1])
@@ -23,13 +23,13 @@ Male_Liver = riptide.maxfit_contextualize(model=model, transcriptome=solo2, cons
 
 Male_Liver_Samples = Male_Liver.flux_samples
 
-with pandas.ExcelWriter("C:/Users/cmoor/Documents/Papin Lab/Human1/Liver Riptide/Samples/Male_Liver_Avg.xlsx") as writer:
+with pandas.ExcelWriter("Male_Liver_18-50_No_Statin_Avg.xlsx") as writer:
     Male_Liver_Samples.to_excel(writer)
 
 
 
 solo2F = {}
-with open('C:/Users/cmoor/Documents/Papin Lab/Human1/Liver Riptide/GSE130991_Abundance_Female_Avg.tsv', 'r') as transcription:
+with open('GSE130991_Abundance_18-50_No_Statin_Female_Avg.tsv', 'r') as transcription:
     for line in transcription:
         line = line.split()
         abunds = float(line[1])
@@ -46,5 +46,5 @@ Female_Liver = riptide.maxfit_contextualize(model=model, transcriptome=solo2F, c
 
 Female_Liver_Samples = Female_Liver.flux_samples
 
-with pandas.ExcelWriter("C:/Users/cmoor/Documents/Papin Lab/Human1/Liver Female_Liver_Avg.xlsx") as writer:
+with pandas.ExcelWriter("Female_Liver_18-50_No_Statin_Avg.xlsx") as writer:
     Female_Liver_Samples.to_excel(writer)
