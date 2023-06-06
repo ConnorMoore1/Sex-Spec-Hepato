@@ -13,11 +13,16 @@ rm(list = ls())
 ```{r load in}
 library(readxl)
 library(dplyr)
+# List all files
 Sample_Files = list.files(path = "C:/Users/cmoor/Documents/Papin Lab/Human1/Liver Riptide/Individual_Models/Samples_Low") # Row is sample, col is Rxn
+
+# Remove incomplete samples
 Sample_Files = Sample_Files[-c(83,238,497,598)]
 
+# Read in example file
 All_Samples_Low =  read_excel(paste("C:/Users/cmoor/Documents/Papin Lab/Human1/Liver Riptide/Individual_Models/Samples_Low/", Sample_Files[1], sep = ""), sheet = 1)[,-1]
 
+# Loop through all flux samples and add
 for (i in 2:length(Sample_Files)){
   This_File = paste("C:/Users/cmoor/Documents/Papin Lab/Human1/Liver Riptide/Individual_Models/Samples_Low/", Sample_Files[i], sep = "")
   
@@ -27,6 +32,7 @@ for (i in 2:length(Sample_Files)){
   
 }
 
+# Write to tsv
 write.table(All_Samples_Low, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Liver Riptide/Individual_Models/All_Samples_Low.tsv", sep = '\t')
 
 
@@ -34,7 +40,7 @@ write.table(All_Samples_Low, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/L
 
 ```{r read table}
 
-
+# Load in samples
 All_Samples = read.table(file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Liver Riptide/Individual_Models/All_Samples_Low.tsv", sep = '\t')
 
 
@@ -42,21 +48,28 @@ All_Samples = read.table(file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Liver
 
 
 ```{r Catagorize}
-
+# Load in all files
 Sample_Files = list.files(path = "C:/Users/cmoor/Documents/Papin Lab/Human1/Liver Riptide/Individual_Models/Samples_Low") # Row is sample, col is Rxn
+
+# Get rid of incomplete samples
 Sample_Files = Sample_Files[-c(83,238,497,598)]
 
+# Set up empty gender df
 Gender = data.frame(matrix(NA, nrow = nrow(All_Samples), ncol = 1))
+
+# Find number of male and female samples
 Num_F_Samp = length(grep("Female",Sample_Files))*110
 Num_M_Samp = length(grep("Male",Sample_Files))*110
 
+# Label them as male or female
 Gender[1:Num_F_Samp,1] = "Female"
 Gender[(Num_F_Samp+1):(Num_F_Samp+Num_M_Samp),1] = "Male"
 
+# Make it a single column
 Gender[length(Gender[,1]),1]
 colnames(Gender) = "Gender"
 
-
+# Add to flux sample df
 All_Samples$Gender = Gender
 
 
@@ -65,43 +78,50 @@ All_Samples$Gender = Gender
 
 ```{r sharedness}
 library(openxlsx)
+
+# Get all rxns in model
 rxn_in_model <- openxlsx::read.xlsx("C:/Users/cmoor/Documents/Papin Lab/Human1/Human-GEM.xlsx", sheet = 1)
 
+# Get male samlpes
 Male_Samples = All_Samples[(Num_F_Samp+1):(Num_F_Samp+Num_M_Samp),1:(ncol(All_Samples)-1)]
 
+# Turn NAs to 0
 Male_Samples[is.na(Male_Samples)] <- 0
 Male_Samples = Male_Samples[, !(colSums(abs(Male_Samples) < 10^-6) == nrow(Male_Samples) )]
 
 
-
+# Find 10 percentile increments
 increment = nrow(Male_Samples)/10
 
-
+# Make empty df
 percentile_df = data.frame(matrix(NA, nrow = 10, ncol = 1))
 
+# Loop through each 10 percentile increment
 for (i in 1:10){
   percentile_df[i,1] = sum(colSums(abs(Male_Samples) < 10^-6) <= i*increment-1 & colSums(abs(Male_Samples) < 10^-6) >= (i-1)*increment)
 }
 
 
-
+#Get female samples
 Female_Samples = All_Samples[1:Num_F_Samp,1:(ncol(All_Samples)-1)]
 
+# Turn NAs to 0
 Female_Samples[is.na(Female_Samples)] <- 0
 Female_Samples = Female_Samples[, !(colSums(abs(Female_Samples) < 10^-6) == nrow(Female_Samples) )]
 
 
-
+# Find 10 percentile increments
 increment = nrow(Female_Samples)/10
 
-
+# Make empty df
 percentile_df_F = data.frame(matrix(NA, nrow = 10, ncol = 1))
 
+# Loop through each 10 percentile increment
 for (i in 1:10){
   percentile_df_F[i,1] = sum(colSums(abs(Female_Samples) < 10^-6) <= i*increment-1 & colSums(abs(Female_Samples) < 10^-6) >= (i-1)*increment)
 }
 
-
+# Bin into 10 percentiles
 binning = seq(from = 95, to = 5, by = -10)
 Male_Per = cbind(binning, percentile_df)
 Female_Per = cbind(binning, percentile_df_F)
@@ -110,7 +130,7 @@ colnames(Female_Per) = c("Bins","Percentile")
 
 
 library(ggplot2)
-
+# plot
 ggplot(data=Male_Per, aes(x=Bins, y=Percentile, width=10, fill = rep("Male", 10))) + 
   theme_classic()+
   scale_x_continuous(breaks=seq(0,100,10))+
@@ -140,31 +160,37 @@ ggplot(data=Female_Per, aes(x=Bins, y=Percentile, width=10, fill = rep("Female",
 ```
 
 ```{r intersex variability}
-
+# Find all reactions of each sex
 Male_Rxns = as.data.frame(colnames(Male_Samples))
 Female_Rxns = as.data.frame(colnames(Female_Samples))
 colnames(Male_Rxns) = "Rxns"
 colnames(Female_Rxns) = "Rxns"
 All_Rxns = rbind(Male_Rxns,Female_Rxns)
 
+# Find list of unique reactions
 All_Rxns_Uni = unique(All_Rxns)
 
-
+# Make empty rxn df
 Rxn_Count_df = data.frame(matrix(NA, nrow = nrow(All_Rxns_Uni), ncol = 2))
 
+# Loop through each rxn
 for(i in 1:nrow(All_Rxns_Uni)){
   
+  # See if it's unique to male
   if(length(grep(All_Rxns_Uni[i,1], colnames(Male_Samples))) == 0){
     
-    Rxn_Count_df[i,1] = .0001
+    Rxn_Count_df[i,1] = .0001 # Make .0001 to make ratio work
     
     Rxn_Count_df[i,2] = sum(abs(Female_Samples[,grep(All_Rxns_Uni[i,1], colnames(Female_Samples))]) < 10^-6)
     
+    # See if it's unique to female
   } else if(length(grep(All_Rxns_Uni[i,1], colnames(Female_Samples))) == 0){
     
     Rxn_Count_df[i,1] = sum(abs(Male_Samples[,grep(All_Rxns_Uni[i,1], colnames(Male_Samples))]) < 10^-6)
     
-    Rxn_Count_df[i,2] = .0001
+    Rxn_Count_df[i,2] = .0001 # Make .0001 to make ratio work
+    
+    # Otherwise make sure reactions are in at least 10% of male and female
   } else if(sum(abs(Female_Samples[,grep(All_Rxns_Uni[i,1], colnames(Female_Samples))]) < 10^-6) > .1*nrow(Female_Samples) | sum(abs(Male_Samples[,grep(All_Rxns_Uni[i,1], colnames(Male_Samples))]) < 10^-6) > .1*nrow(Male_Samples)){
     
     Rxn_Count_df[i,1] = sum(abs(Male_Samples[,grep(All_Rxns_Uni[i,1], colnames(Male_Samples))]) < 10^-6)
@@ -174,15 +200,19 @@ for(i in 1:nrow(All_Rxns_Uni)){
   
 }
 
+# Remove NAs
 Rxn_Count_df_noNA = Rxn_Count_df[!is.na(Rxn_Count_df[,1]),]
+
+# Find log2fc
 LogDiff = as.data.frame(log2((Rxn_Count_df_noNA[,1]/nrow(Male_Samples))/(Rxn_Count_df_noNA[,2]/nrow(Female_Samples))))
 rownames(LogDiff) = All_Rxns_Uni[!is.na(Rxn_Count_df[,1]),1]
 
 
 
-
+# Make a table with percentiles
 bin_table = as.data.frame(table(cut(LogDiff[,1], breaks=c(-100,seq(from = -1.5, to = 1.5, by = .1),100))))
 
+# Plot
 ggplot(bin_table, aes(x=seq(from = -1.55, to = 1.55, by = .1), y = Freq, fill = rep("Female", 32))) + 
   theme_classic()+
   geom_bar(stat="identity")+
@@ -196,42 +226,55 @@ ggplot(bin_table, aes(x=seq(from = -1.55, to = 1.55, by = .1), y = Freq, fill = 
   theme(legend.title = element_text(size = 16, face = "bold"))
 
 
+# Find what is unique to each sex
 
+# Make empty df
 Male_Unique = data.frame(matrix(NA, nrow = length(LogDiff[LogDiff[,1] > 2,1]), ncol = 3))
+
+# Get all unique male rxns
 Male_Rxn_Unique = rownames(LogDiff)[LogDiff[,1] > 2]
 
 
-
+# Loop through each reaction
 for(i in 1:nrow(Male_Unique)){
   
+  # Find ID, equation, and subsystem
   Male_Unique[i,1] = rxn_in_model$ID[grep(Male_Rxn_Unique[i], rxn_in_model$ID)]
   Male_Unique[i,2] = rxn_in_model$EQUATION[grep(Male_Rxn_Unique[i], rxn_in_model$ID)]
   Male_Unique[i,3] = rxn_in_model$SUBSYSTEM[grep(Male_Rxn_Unique[i], rxn_in_model$ID)]
   
   
 }
+
+# Name columns
 colnames(Male_Unique) = c("ID","Reaction","Subsystem")
 
+# List out in table
 table(Male_Unique$Subsystem)[order(table(Male_Unique$Subsystem),decreasing = T)]
 
 
 
-
+# Make empty df
 Female_Unique = data.frame(matrix(NA, nrow = length(LogDiff[LogDiff[,1] < -2,1]), ncol = 3))
+
+# Get all unique female rxns
 Female_Rxn_Unique = rownames(LogDiff)[LogDiff[,1] < 2]
 
 
-
+# Loop through each reaction
 for(i in 1:nrow(Female_Unique)){
   
+  # Find ID, equation, and subsystem
   Female_Unique[i,1] = rxn_in_model$ID[grep(Female_Rxn_Unique[i], rxn_in_model$ID)]
   Female_Unique[i,2] = rxn_in_model$EQUATION[grep(Female_Rxn_Unique[i], rxn_in_model$ID)]
   Female_Unique[i,3] = rxn_in_model$SUBSYSTEM[grep(Female_Rxn_Unique[i], rxn_in_model$ID)]
   
   
 }
+# Name columns
 colnames(Female_Unique) = c("ID","Reaction","Subsystem")
 
+# List out in table
 table(Female_Unique$Subsystem)[order(table(Female_Unique$Subsystem), decreasing = T)]
 
 ```
