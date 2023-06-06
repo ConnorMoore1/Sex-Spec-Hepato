@@ -13,41 +13,47 @@ rm(list = ls())
 library(dplyr)
 library(EnsDb.Hsapiens.v79)
 
+# List all DEG files from ToxicoDB
 x = list.files(path = "C:/Users/cmoor/Documents/Papin Lab/Human1/Drug Treatment/Drug DEGs High")
 
-
+# Find all genes in model
 genes_in_model <- openxlsx::read.xlsx("C:/Users/cmoor/Documents/Papin Lab/Human1/Human-GEM.xlsx", sheet = 4)
 
+# Get just ENSEMBL IDs
 ENSEMBLinmodel = as.data.frame(genes_in_model[,2])
 colnames(ENSEMBLinmodel) = "GeneID"
 
 
-
+# Loop through each drug
 for (i in 1:length(x)){
+  # Load drug i
   DrugDat = read.table(file = paste0("C:/Users/cmoor/Documents/Papin Lab/Human1/Drug Treatment/Drug DEGs High/", x[i]), sep = ',', header = TRUE)
-
+  
+  # Filter for human, high dose, and 24 hour time
   DrugDat = DrugDat[grep("Open TG-GATEs Human", DrugDat$Dataset),]
   DrugDat = DrugDat[grep("High", DrugDat$Dose),]
   DrugDat = DrugDat[grep("24", DrugDat$Time),]
   
+  # Get gene
   geneSymbols = DrugDat$Gene
   
+  # Get gene IDs maped to gene symbol
   geneIDs2 <- ensembldb::select(EnsDb.Hsapiens.v79, keys= geneSymbols, keytype = "SYMBOL", columns = c("SYMBOL","GENEID"))
-
   geneIDs2 = geneIDs2[-grep("LRG", geneIDs2$GENEID),]
   colnames(geneIDs2) = c("Gene","GeneID")
 
+  # Join data with gene IDs
   DrugDatWithGenes = inner_join(DrugDat, geneIDs2, by = "Gene")
-  
-  
   DrugDatModelGenes = inner_join(DrugDatWithGenes, ENSEMBLinmodel, by = "GeneID")
 
+  # Assign log2 fold change to 0 if not a DEG
   DrugDatModelGenes$log2.fold.change.[DrugDatModelGenes$FDR > 0.1] = 0
 
+  # Rename models
   colnames(DrugDatModelGenes) = c("Gene", "logFC", "P.value", "adj.P.Val", "Dataset", "Dose", "Time", "NAME")
 
 
-
+  # Write to csv
   write.table(DrugDatModelGenes, file = paste0("C:/Users/cmoor/Documents/Papin Lab/Human1/Drug Treatment/SaveDEGs/", x[i]), 
             col.names = TRUE, row.names = FALSE, sep = ",")
 }
@@ -55,6 +61,7 @@ for (i in 1:length(x)){
 
 
 ```{r Drug Sig}
+# POST TIDES ANALYSIS
 
 options(java.parameters = "-Xmx1024m")
 
@@ -77,35 +84,41 @@ library(forcats)
 library(ggnewscale)
 
 
-
+# List all TIDEs files
 x = list.files(path = "C:/Users/cmoor/Documents/Papin Lab/Human1/Drug Treatment/DrugTides")
 
+# Divide between random data and log2 fold change data
 allGenes = x[grep("allGenes", x)]
 random = x[grep("random", x)]
 
+# Loop through each file
 for(i in 1:length(random)){
-  ischemic.random <- readxl::read_xlsx(path= paste0("C:/Users/cmoor/Documents/Papin Lab/Human1/Drug Treatment/DrugTides/", random[i]), 
+  # Load random file
+  Drug.random <- readxl::read_xlsx(path= paste0("C:/Users/cmoor/Documents/Papin Lab/Human1/Drug Treatment/DrugTides/", random[i]), 
                                      sheet = 1, 
                                      col_names = FALSE)
   
-  colnames(ischemic.random)[1:1000] <- paste0('X',c(1:1000))
+  # Name columns
+  colnames(Drug.random)[1:1000] <- paste0('X',c(1:1000))
     
   # colnames are 1:1000
   # Need to read in some example task data for task names
-  GSE5406.Ischemic = read.xlsx(file = paste0("C:/Users/cmoor/Documents/Papin Lab/Human1/Drug Treatment/DrugTides/", allGenes[i]), sheetIndex = 1, header = 0)
-  colnames(GSE5406.Ischemic) = c('ID','description','taskScore','significance')
+  DrugTIDEs = read.xlsx(file = paste0("C:/Users/cmoor/Documents/Papin Lab/Human1/Drug Treatment/DrugTides/", allGenes[i]), sheetIndex = 1, header = 0)
+  colnames(DrugTIDEs) = c('ID','description','taskScore','significance')
   
-  write.xlsx(GSE5406.Ischemic, file = paste0("C:/Users/cmoor/Documents/Papin Lab/Human1/Drug Treatment/DrugSig/", "PVal_", allGenes[i]))
+  # Write significance values
+  write.xlsx(DrugTIDEs, file = paste0("C:/Users/cmoor/Documents/Papin Lab/Human1/Drug Treatment/DrugSig/", "PVal_", allGenes[i]))
   
-  ischemic.random <- cbind(GSE5406.Ischemic %>% dplyr::select(ID, description), ischemic.random)
   
-  # Pick out the TIDEs from GSE5406
-  GSE5406.Ischemic <- GSE5406.Ischemic %>% 
+  Drug.random <- cbind(DrugTIDEs %>% dplyr::select(ID, description), Drug.random)
+  
+  # Pick out the TIDEs from Drugs
+  DrugTIDEs <- DrugTIDEs %>% 
     mutate(significance = ifelse(abs(significance) > 0.025, 0, ifelse(significance < 0, -1, 1))) %>% 
     dplyr::select(ID, description, taskScore, significance)
   
-  
-  write.xlsx(GSE5406.Ischemic, file = paste0("C:/Users/cmoor/Documents/Papin Lab/Human1/Drug Treatment/DrugSig/", "SignificantTasks", allGenes[i]))
+  # Write task info as an excel file
+  write.xlsx(DrugTIDEs, file = paste0("C:/Users/cmoor/Documents/Papin Lab/Human1/Drug Treatment/DrugSig/", "SignificantTasks", allGenes[i]))
   i
 }
 
@@ -116,17 +129,20 @@ for(i in 1:length(random)){
 library(readxl)
 library(xlsx)
 
+# List all files
 x = list.files(path = "C:/Users/cmoor/Documents/Papin Lab/Human1/Drug Treatment/DrugSig", full.names = T)
 
+# Get significant task files
 Sig = x[grep("SignificantTasks", x)]
 
+# Open example file for format
 DrugSigMat =  read.xlsx(file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Drug Treatment/DrugSig/SignificantTasksAll_allGenes.xlsx", sheetIndex = 1, header = 1)
 
-
+# Rename columns
 DrugNames = colnames(DrugSigMat)[2:length(colnames(DrugSigMat))]
-
 DrugNames = gsub(".", " ", DrugNames, fixed = T)
 
+# Loop through all drugs and add
 for(i in 1:length(DrugNames)){
   
   DrugSig = read.xlsx(file = Sig[grep(substr(DrugNames[i], 1, 10), Sig, ignore.case = T)], sheetIndex = 1, header = 1)
@@ -134,6 +150,7 @@ for(i in 1:length(DrugNames)){
   
 }
 
+# Write to excel
 write.xlsx(DrugSigMat, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Drug Treatment/DrugSig/DrugMatSigFilledIn.xlsx", row.names = F)
 
 ```
@@ -142,14 +159,18 @@ write.xlsx(DrugSigMat, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Drug Tr
 library(readxl)
 library(xlsx)
 
+# Get all files
 x = list.files(path = "C:/Users/cmoor/Documents/Papin Lab/Human1/Drug Treatment/DrugTides")
 
+# Split between TIDEs and random
 allGenes = x[grep("allGenes", x)]
 random = x[grep("random", x)]
 
+# Make blank data frames for significance and task scores
 SigMat = data.frame(matrix(NA, nrow = 135, ncol = length(allGenes)))
 TaskMat = data.frame(matrix(NA, nrow = 135, ncol = length(allGenes)))
 
+# Loop through each file
 for(i in 1:length(allGenes)){
   Sig = read.xlsx(file = paste0("C:/Users/cmoor/Documents/Papin Lab/Human1/Drug Treatment/DrugSig/", "PVal_", allGenes[i]), sheetIndex = 1, header = 1)
   Sig$significance[Sig$significance == 0] = .001
@@ -158,218 +179,135 @@ for(i in 1:length(allGenes)){
   TaskMat[,i] = Sig$taskScore
 }
 
+# Rename files
 allGenesNames = gsub("High_allGenes.xlsx", "", allGenes)
 
 
+# Fix column and row names
 colnames(SigMat) = allGenesNames
 rownames(SigMat) = Sig$description
 
 colnames(TaskMat) = allGenesNames
 rownames(TaskMat) = Sig$description
 
-AbsMat = log10(abs(SigMat))
-
-for(i in 1:ncol(AbsMat)){
-  AbsMat[SigMat[,i] > 0,i] = -AbsMat[SigMat[,i] > 0,i]
-
-}
-
-#write.xlsx(TaskMat, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Drug Treatment/DrugSig/TaskMat.xlsx", row.names = T)
+# Write to excel
+write.xlsx(TaskMat, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Drug Treatment/DrugSig/TaskMat.xlsx", row.names = T)
 ```
 
-
-
-```{r Heatmap}
+```{r Sex Spef Heatmap}
 library(tidyr)
 library(ggplot2)
 
-StatMat = stack(AbsMat)
+# Stack task scores
 TaskStack = stack(TaskMat)
-Subsys = as.vector(t(rbind(rownames(AbsMat),rownames(AbsMat),rownames(AbsMat))))
 
+# Create vector of subsystem names
+Subsys = as.vector(t(rbind(rownames(TaskMat),rownames(TaskMat),rownames(TaskMat))))
 
+# Get drug names
 Names = read.xlsx(file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Drug Treatment/DrugNames.xlsx", sheetIndex = 1, header = 0)
 
+# Loop through drug names to get full names
 for(i in 1:nrow(Names)){
   
   TaskStack$ind = gsub(Names[i,1],Names[i,2], TaskStack$ind)
   
 }
 
+# Make drug names factor
 TaskStack$ind = as.factor(TaskStack$ind)
 
+# Just make a big data frame with repeating subsystem names; prune later
 for(i in 1:5){
-  
   Subsys = cbind(Subsys, Subsys)
+}
+
+# Get exact number of subsystems we need
+Subsys = Subsys[1:nrow(TaskStack)]
+
+# Assign subsystems to the task scores
+TaskStack$Subsys = Subsys
+
+# Load in sex info for each drug
+Drug_Sex = read.xlsx(file = "C:/Users/cmoor/Documents/Papin Lab/Admin/2022-7-18 Draft/Edits/PLOS/nar-02356-data-e-2014-file007/nar-02356-data-e-2014-file006.xlsx", sheetIndex = 4, header = 0)
+colnames(Drug_Sex) = Drug_Sex[2,]
+
+# Remove unneeded infor
+Drug_Sex = Drug_Sex[-c(1,2),]
+
+# Make drug names match
+TaskStack$ind = gsub("Alipidem", "Alpidem", TaskStack$ind)
+TaskStack$ind = gsub("Nitrofurantion", "Nitrofurantoin", TaskStack$ind)
+
+# Make female and male drug data frames
+F_Drugs = data.frame(matrix(NA, nrow = length(unique(TaskStack$ind)), ncol = 1))
+M_Drugs = data.frame(matrix(NA, nrow = length(unique(TaskStack$ind)), ncol = 1))
+
+# Initiate counter
+M_count = 1
+F_count = 1
+
+# Loop through each drug
+for(i in 1:length(unique(TaskStack$ind))){
+  
+  # Get drug name
+  drug_idx = grep(unique(TaskStack$ind)[i], Drug_Sex$COMPOUND_NAME, ignore.case = T)[1]
+  
+  # Check if its male or female and add
+  if(Drug_Sex$SEX_TYPE[drug_idx] == "Male"){
+    
+    M_Drugs[M_count,] = unique(TaskStack$ind)[i]
+    M_count = M_count+1
+    
+  }else{
+    
+    F_Drugs[F_count,] = unique(TaskStack$ind)[i]
+    F_count = F_count+1
+    
+  }
+  
   
 }
 
-Subsys = Subsys[1:nrow(StatMat)]
+# Remove NAs
+F_Drugs = na.omit(F_Drugs)
+M_Drugs = na.omit(M_Drugs)
 
-StatMat$Subsys = Subsys
-TaskStack$Subsys = Subsys
-
-library("ggdendro")
-
-otter_matrix <- t(as.matrix(AbsMat))
-rownames(otter_matrix) <- colnames(AbsMat)
+# Create male and female task score data frames
+F_TaskStack = TaskStack[grep(paste(F_Drugs[,1],collapse="|"), TaskStack$ind),]
+M_TaskStack = TaskStack[grep(paste(M_Drugs[,1],collapse="|"), TaskStack$ind),]
 
 
-otter_dendro <- as.dendrogram(hclust(d = dist(x = otter_matrix, method = "euclidean"), method = "ward.D2"))
-dendro_plot <- ggdendrogram(data = otter_dendro, rotate = F)
-dendro_plot <- dendro_plot + theme(axis.text.x = element_text(size = 8))
+# Find indeces for all sex-biased subsystems in female data frame
+idx = grep("Acylglycerides metabolism|Androgen metabolism|Beta oxidation of di-unsaturated fatty acids \\(n-6\\) \\(peroxisomal\\)|Beta oxidation of even-chain fatty acids \\(peroxisomal\\)|Beta oxidation of odd-chain fatty acids \\(mitochondrial\\)|Beta oxidation of phytanic acid \\(peroxisomal\\)|Beta oxidation of unsaturated fatty acids \\(n-7\\) \\(peroxisomal\\)|Beta oxidation of unsaturated fatty acids \\(n-9\\) \\(peroxisomal\\)|Bile acid biosynthesis|Cholesterol biosynthesis 1|Cholesterol biosynthesis 2|Cholesterol biosynthesis 3|Dietary fiber binding|Ether lipid metabolism|Exchange/demand reactions|Fatty acid activation (cytosolic)|Fatty acid activation \\(endoplasmic reticular\\)|Fatty acid biosynthesis \\(unsaturated\\)|Fatty acid desaturation \\(even-chain\\)|Fatty acid desaturation \\(odd-chain\\)|Fatty acid elongation \\(even-chain\\)|Fatty acid elongation \\(odd-chain\\)|Fatty acid oxidation|Glucocorticoid biosynthesis|Glycine, serine and threonine metabolism|Glycolysis / Gluconeogenesis|Glycosphingolipid metabolism|Nicotinate and nicotinamide metabolism|Nucleotide metabolism|Omega-3 fatty acid metabolism|Omega-6 fatty acid metabolism|Pantothenate and CoA biosynthesis|Pentose and glucuronate interconversions|Protein assembly|Protein modification|Purine metabolism|Pyrimidine metabolism|Serotonin and melatonin biosynthesis|Steroid metabolism|Tryptophan metabolism|Tyrosine metabolism|Vitamin B12 metabolism|Xenobiotics metabolism|Cholesterol metabolism|Fatty acid activation \\(cytosolic\\)", F_TaskStack$Subsys, ignore.case = T)
 
-otter_order <- order.dendrogram(otter_dendro)
+# Create sex spef task score data frame
+TaskStackLiverTask = F_TaskStack[idx,]
 
-TaskStack$ind <- factor(x = TaskStack$ind,
-                               levels = unique(TaskStack$ind)[otter_order], 
-                               ordered = TRUE)
+# Shorten subsys names
+TaskStackLiverTask$Subsys = gsub("metabolism","met.", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("poly-unsaturated fatty acid","PUFA", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("unsaturated fatty acid","UFA", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("fatty acid","FA", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("mitochondrial","mito.", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("peroxisomal","perox.", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("endoplasmic reticular","ER", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("cytosolic","ctyo.", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("peroxisomal","perox.", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("beta oxidation","β Oxi.", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("lacto and neolacto series","lacto", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("series","", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub(" \\(Bloch pathway\\)","", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub(" \\(Kandustch-Russell pathway\\)","", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("interconversions","inter.", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("biosynthesis","bsythn.", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub(" and "," & ", TaskStackLiverTask$Subsys, ignore.case = T)
 
-png(file="C:/Users/cmoor/Documents/Papin Lab/Human1/Drug Treatment/DrugHeatmap.png",
-width=1100, height=900)
-ggplot(TaskStack, aes(ind, Subsys, fill= values)) + 
-  geom_tile() +
-  scale_fill_gradient2('Task Score', low = "blue", mid = "white", high = "red", midpoint = 0, guide = guide_colorbar(title.position = "top", frame.colour = "black", ticks.colour = "black")) +
-  theme(axis.text.y = element_text(size = 8)) +
-  theme(axis.text.x = element_text(size = 8)) +
-  coord_flip() +
-  geom_tile(color = "black", size = .01) +
-  theme(axis.text.x = element_text(angle = 90, vjust = .35, hjust=1)) +
-  theme(axis.title.x=element_blank(),axis.title.y=element_blank(),axis.ticks = element_blank()) +
-  theme(axis.text.y = element_text(face="bold")) +
-  theme(legend.key.size = unit(1, 'cm'), #change legend key size
-        legend.key.height = unit(1, 'cm'), #change legend key height
-        legend.key.width = unit(1, 'cm'), #change legend key width
-        legend.title = element_text(size=14), #change legend title font size
-        legend.text = element_text(size=10)) +#change legend text font size
-  theme(legend.title.align = 0.5,
-        legend.direction = "vertical",
-        legend.box.just = "center")
-dev.off()
-
-# Preview the plot
-png(file="C:/Users/cmoor/Documents/Papin Lab/Human1/Drug Treatment/DrugDendro.png",
-width=1100, height=900)
-print(dendro_plot)
-dev.off()
-
-hc = hclust(dist(x = otter_matrix, method = "euclidean"), method = "ward.D2")
-plot(hc, hang = -3, cex = 0.1)
-
-
-hc2 = as.dendrogram(hc)
-otter_order <- order.dendrogram(hc2)
-
-
-otter_matrix <- t(as.matrix(AbsMat))
-hcDrug = hclust(dist(x = otter_matrix, method = "euclidean"), method = "ward.D2")
-plot(hcDrug, hang = -3, cex = 0.1)
-
-
-hc2Drug = as.dendrogram(hcDrug)
-otter_orderDrug <- order.dendrogram(hc2Drug)
-
-
-
-StatMat$Subsys <- factor(x = StatMat$Subsys,
-                               levels = StatMat$Subsys[otter_order], 
-                               ordered = TRUE)
-library(gplots)
-heatmap(as.matrix(AbsMat))
-
-
-otter_matrix <- as.matrix(TaskMat)
-rownames(otter_matrix) <- rownames(TaskMat)
-
-library(dendextend)
-otter_dendro <- as.dendrogram(hclust(d = dist(x = otter_matrix, method = "euclidean"), method = "ward.D2"))
-dendro_plot <- ggdendrogram(data = otter_dendro, rotate = F)
-dendro_plot <- dendro_plot + theme(axis.text.x = element_text(size = 9))
-
-plot(dendro_plot)
-
-
-otter_matrix <- as.matrix(AbsMat)
-rownames(otter_matrix) <- rownames(AbsMat) 
-
-otter_dendro <- as.dendrogram(hclust(d = dist(x = otter_matrix, method = "euclidean"), method = "ward.D2"))
-dendro_plot <- ggdendrogram(data = otter_dendro, rotate = F)
-dendro_plot <- dendro_plot + theme(axis.text.x = element_text(size = 8))
-plot(dendro_plot)
-
-png(file="C:/Users/cmoor/Documents/Papin Lab/Human1/Drug Treatment/DrugHeatmapBig.png",
-width=5000, height=2000)
-heatmap.2(t(as.matrix(TaskMat)), trace = "none", keysize = .1)
-dev.off()
-
-#write.xlsx(StatMat, file = "C:/Users/cmoor/Documents/Class/BME 6311/HeatMapSig.xlsx")
-
-
-
-ggplot(StatMat, aes(ind, Subsys, fill= values)) + 
-  geom_tile() +
-  scale_fill_gradient2('-log10 p-value', low = "blue", mid = "white", high = "red", midpoint = 0, guide = guide_colorbar(title.position = "top", frame.colour = "black", ticks.colour = "black")) +
-  theme(axis.text.y = element_text(size = 14)) +
-  theme(axis.text.x = element_text(size = 10)) +
-  coord_flip() +
-  geom_tile(color = "black", size = .01) +
-  theme(axis.text.x = element_text(angle = 90, vjust = .35, hjust=1)) +
-  theme(axis.text.y = element_text(angle = 90, vjust = .0, hjust=.5)) +
-  theme(axis.title.x=element_blank(),axis.title.y=element_blank(),axis.ticks = element_blank()) +
-  theme(axis.text.y = element_text(face="bold")) +
-  theme(legend.key.size = unit(1, 'cm'), #change legend key size
-        legend.key.height = unit(1, 'cm'), #change legend key height
-        legend.key.width = unit(1, 'cm'), #change legend key width
-        legend.title = element_text(size=14), #change legend title font size
-        legend.text = element_text(size=10)) +#change legend text font size
-  theme(legend.title.align = 0.5,
-        legend.direction = "vertical",
-        legend.box.just = "center") +
-  theme(legend.position="none")
-
-
-
-ggplot(StatMat, aes(ind, Subsys, fill= values)) + 
-  geom_tile() +
-  scale_fill_gradient2('-log10 p-value', low = "#00a873", mid = "white", high = "#e04102", midpoint = 0, guide = guide_colorbar(title.position = "top", frame.colour = "black", ticks.colour = "black")) +
-  theme(axis.text.y = element_text(size = 1)) +
-  theme(axis.text.x = element_text(size = 1)) +
-  coord_flip() +
-  geom_tile(color = "black", size = .01) +
-  theme(axis.text.x = element_text(angle = 90, vjust = .35, hjust=1)) +
-  #theme(axis.text.y = element_text(angle = 90, vjust = .0, hjust=.5)) +
-  theme(axis.title.x=element_blank(),axis.title.y=element_blank(),axis.ticks = element_blank()) +
-  theme(axis.text.y = element_text(face="bold")) +
-  theme(legend.key.size = unit(1, 'cm'), #change legend key size
-        legend.key.height = unit(1, 'cm'), #change legend key height
-        legend.key.width = unit(1, 'cm'), #change legend key width
-        legend.title = element_text(size=14), #change legend title font size
-        legend.text = element_text(size=10)) +#change legend text font size
-  theme(legend.title.align = 0.5,
-        legend.direction = "vertical",
-        legend.box.just = "center")
-
-
-
-
-
-
-```
-
-```{r specific tasks}
-
-
-
-idx = grep("Androgen metabolism|Ether lipid metabolism|Glucocorticoid biosynthesis|Tryptophan metabolism|Xenobiotics metabolism|Serotonin and melatonin biosynthesis|Pentose and glucuronate interconversions|Vitamin A metabolism", TaskStack$Subsys)
-
-TaskStackLiverTask = TaskStack[idx,]
-  
-png(file="C:/Users/cmoor/Documents/Papin Lab/Admin/2022-5-31 Draft/LiverTasksHeatmapRevised2.png",
-width=600, height=900)
+# Plot
 ggplot(TaskStackLiverTask, aes(ind, Subsys, fill= cut(values,breaks = seq(from = -2, to = 2, length.out = 12), labels = seq(from = -2, to = 2, length.out = 11)))) + 
   geom_tile() +
   scale_fill_manual(drop = F, values = c("#010a6e","#0013e3","#606ced","#949cf3","#c1c6f8","white","#fbd5d5","#f8b8b8","#f06b6b","#e60202","#700101"), name = "Task Score")+
-  theme(axis.text.y = element_text(size = 12)) +
+  theme(axis.text.y = element_text(size = 8)) +
   theme(axis.text.x = element_text(size = 16, face = "bold")) +
   coord_flip() +
   theme(axis.text.x = element_text(angle = 90, vjust = .35, hjust=1)) +
@@ -387,43 +325,41 @@ ggplot(TaskStackLiverTask, aes(ind, Subsys, fill= cut(values,breaks = seq(from =
   theme(panel.border = element_blank())+
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
   theme(panel.background = element_blank())
-dev.off()
 
 
 
 
-idx = grep("fatty acid|lipid|linoleate|Eicosanoid metabolism|Arachidonic acid", TaskStack$Subsys, ignore.case = T)
+# Find indeces for all sex-biased subsystems in male data frame
+idx = grep("Acylglycerides metabolism|Androgen metabolism|Beta oxidation of di-unsaturated fatty acids \\(n-6\\) \\(peroxisomal\\)|Beta oxidation of even-chain fatty acids \\(peroxisomal\\)|Beta oxidation of odd-chain fatty acids \\(mitochondrial\\)|Beta oxidation of phytanic acid \\(peroxisomal\\)|Beta oxidation of unsaturated fatty acids \\(n-7\\) \\(peroxisomal\\)|Beta oxidation of unsaturated fatty acids \\(n-9\\) \\(peroxisomal\\)|Bile acid biosynthesis|Cholesterol biosynthesis 1|Cholesterol biosynthesis 2|Cholesterol biosynthesis 3|Dietary fiber binding|Ether lipid metabolism|Exchange/demand reactions|Fatty acid activation (cytosolic)|Fatty acid activation \\(endoplasmic reticular\\)|Fatty acid biosynthesis \\(unsaturated\\)|Fatty acid desaturation \\(even-chain\\)|Fatty acid desaturation \\(odd-chain\\)|Fatty acid elongation \\(even-chain\\)|Fatty acid elongation \\(odd-chain\\)|Fatty acid oxidation|Glucocorticoid biosynthesis|Glycine, serine and threonine metabolism|Glycolysis / Gluconeogenesis|Glycosphingolipid metabolism|Nicotinate and nicotinamide metabolism|Nucleotide metabolism|Omega-3 fatty acid metabolism|Omega-6 fatty acid metabolism|Pantothenate and CoA biosynthesis|Pentose and glucuronate interconversions|Protein assembly|Protein modification|Purine metabolism|Pyrimidine metabolism|Serotonin and melatonin biosynthesis|Steroid metabolism|Tryptophan metabolism|Tyrosine metabolism|Vitamin B12 metabolism|Xenobiotics metabolism|Cholesterol metabolism|Fatty acid activation \\(cytosolic\\)", M_TaskStack$Subsys, ignore.case = T)
 
-TaskStackLipidTask = TaskStack[idx,]
-
-
-ggplot(TaskStackLipidTask, aes(ind, Subsys, fill= values)) + 
-  geom_tile() +
-  scale_fill_gradient2('Task Score', low = "blue", mid = "white", high = "red", midpoint = 0, guide = guide_colorbar(title.position = "top", frame.colour = "black", ticks.colour = "black")) +
-  theme(axis.text.y = element_text(size = 14)) +
-  theme(axis.text.x = element_text(size = 16, face = "bold")) +
-  coord_flip() +
-  geom_tile(color = "black", size = .01) +
-  theme(axis.text.x = element_text(angle = 90, vjust = .35, hjust=1)) +
-  #theme(axis.text.y = element_text(angle = 90, vjust = .0, hjust=.5)) +
-  theme(axis.title.x=element_blank(),axis.title.y=element_blank(),axis.ticks = element_blank()) +
-  theme(axis.text.y = element_text(face="bold")) +
-  theme(legend.key.size = unit(1, 'cm'), #change legend key size
-        legend.key.height = unit(1, 'cm'), #change legend key height
-        legend.key.width = unit(1, 'cm'), #change legend key width
-        legend.title = element_text(size=14), #change legend title font size
-        legend.text = element_text(size=10)) +#change legend text font size
-  theme(legend.title.align = 0.5,
-        legend.direction = "vertical",
-        legend.box.just = "center")
+# Create sex spef task score data frame
+TaskStackLiverTask = M_TaskStack[idx,]
 
 
-png(file="C:/Users/cmoor/Documents/Papin Lab/Admin/2022-5-31 Draft/LipidTasksHeatmapRevised.png",
-width=1100, height=1300)
-ggplot(TaskStackLipidTask, aes(ind, Subsys, fill= cut(values,breaks = seq(from = -2.5, to = 2.5, length.out = 12), labels = seq(from = -2.5, to = 2.5, length.out = 11)))) + 
+# Shorten subsys names
+TaskStackLiverTask$Subsys = gsub("metabolism","met.", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("poly-unsaturated fatty acid","PUFA", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("unsaturated fatty acid","UFA", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("fatty acid","FA", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("mitochondrial","mito.", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("peroxisomal","perox.", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("endoplasmic reticular","ER", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("cytosolic","ctyo.", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("peroxisomal","perox.", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("beta oxidation","β Oxi.", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("lacto and neolacto series","lacto", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("series","", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub(" \\(Bloch pathway\\)","", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub(" \\(Kandustch-Russell pathway\\)","", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("interconversions","inter.", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub("biosynthesis","bsythn.", TaskStackLiverTask$Subsys, ignore.case = T)
+TaskStackLiverTask$Subsys = gsub(" and "," & ", TaskStackLiverTask$Subsys, ignore.case = T)
+
+# Plot
+ggplot(TaskStackLiverTask, aes(ind, Subsys, fill= cut(values,breaks = seq(from = -2, to = 2, length.out = 12), labels = seq(from = -2, to = 2, length.out = 11)))) + 
   geom_tile() +
   scale_fill_manual(drop = F, values = c("#010a6e","#0013e3","#606ced","#949cf3","#c1c6f8","white","#fbd5d5","#f8b8b8","#f06b6b","#e60202","#700101"), name = "Task Score")+
-  theme(axis.text.y = element_text(size = 12)) +
+  theme(axis.text.y = element_text(size = 8)) +
   theme(axis.text.x = element_text(size = 16, face = "bold")) +
   coord_flip() +
   theme(axis.text.x = element_text(angle = 90, vjust = .35, hjust=1)) +
@@ -441,164 +377,7 @@ ggplot(TaskStackLipidTask, aes(ind, Subsys, fill= cut(values,breaks = seq(from =
   theme(panel.border = element_blank())+
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
   theme(panel.background = element_blank())
-dev.off()
 
 
-
-TaskStackLipidTask$Subsys = gsub("metabolism","met.", TaskStackLipidTask$Subsys, ignore.case = T)
-TaskStackLipidTask$Subsys = gsub("poly-unsaturated fatty acid","PUFA", TaskStackLipidTask$Subsys, ignore.case = T)
-TaskStackLipidTask$Subsys = gsub("unsaturated fatty acid","UFA", TaskStackLipidTask$Subsys, ignore.case = T)
-TaskStackLipidTask$Subsys = gsub("fatty acid","FA", TaskStackLipidTask$Subsys, ignore.case = T)
-TaskStackLipidTask$Subsys = gsub("mitochondrial","mito.", TaskStackLipidTask$Subsys, ignore.case = T)
-TaskStackLipidTask$Subsys = gsub("peroxisomal","perox.", TaskStackLipidTask$Subsys, ignore.case = T)
-TaskStackLipidTask$Subsys = gsub("endoplasmic reticular","ER", TaskStackLipidTask$Subsys, ignore.case = T)
-TaskStackLipidTask$Subsys = gsub("cytosolic","ctyo.", TaskStackLipidTask$Subsys, ignore.case = T)
-TaskStackLipidTask$Subsys = gsub("peroxisomal","perox.", TaskStackLipidTask$Subsys, ignore.case = T)
-TaskStackLipidTask$Subsys = gsub("beta oxidation","β Oxi.", TaskStackLipidTask$Subsys, ignore.case = T)
-TaskStackLipidTask$Subsys = gsub("lacto and neolacto series","lacto", TaskStackLipidTask$Subsys, ignore.case = T)
-TaskStackLipidTask$Subsys = gsub("series","", TaskStackLipidTask$Subsys, ignore.case = T)
-
-
-ggplot(TaskStackLipidTask, aes(ind, Subsys, fill= cut(-values,breaks = seq(from = 2.5, to = -2.5, length.out = 12), labels = seq(from = 2.5, to = -2.5, length.out = 11)))) + 
-  geom_tile() +
-  scale_fill_manual(drop = F, values = c("#700101","#e60202","#f06b6b","#f8b8b8","#fbd5d5","white","#c1c6f8","#949cf3","#606ced","#0013e3","#010a6e"), name = "Task Score")+
-  theme(axis.text.y = element_text(size = 8, face = "bold")) +
-  theme(axis.text.x = element_text(size = 10, face = "bold")) +
-  coord_flip() +
-  theme(axis.text.x = element_text(angle = 90, vjust = .35, hjust=1)) +
-  theme(axis.title.x=element_blank(),axis.title.y=element_blank(),axis.ticks = element_blank()) +
-  theme(axis.text.y = element_text(face="bold")) +
-  theme(legend.key.size = unit(.5, 'cm'), #change legend key size
-        legend.key.height = unit(.5, 'cm'), #change legend key height
-        legend.key.width = unit(.5, 'cm'), #change legend key width
-        legend.title = element_text(size=14, face= "bold"), #change legend title font size
-        legend.text = element_text(size=10, face = "bold")) +#change legend text font size
-  theme(legend.title.align = 0.5,
-        legend.direction = "vertical",
-        legend.box.just = "center")+
-  theme(panel.border = element_blank())+
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(panel.background = element_blank())
-
-
-
-
-TaskStackLiverTask$Subsys = gsub("metabolism","met.", TaskStackLiverTask$Subsys, ignore.case = T)
-TaskStackLiverTask$Subsys = gsub("interconversions","met.", TaskStackLiverTask$Subsys, ignore.case = T)
-TaskStackLiverTask$Subsys = gsub("biosynthesis","synth.", TaskStackLiverTask$Subsys, ignore.case = T)
-
-
-
-ggplot(TaskStackLiverTask, aes(Subsys, ind, fill= cut(-values,breaks = seq(from = 2.5, to = -2.5, length.out = 12), labels = seq(from = 2.5, to = -2.5, length.out = 11)))) + 
-  geom_tile() +
-  scale_fill_manual(drop = F, values = c("#700101","#e60202","#f06b6b","#f8b8b8","#fbd5d5","white","#c1c6f8","#949cf3","#606ced","#0013e3","#010a6e"), name = "Task Score")+
-  theme(axis.text.y = element_text(size = 8, face = "bold")) +
-  theme(axis.text.x = element_text(size = 10, face = "bold")) +
-  coord_flip() +
-  theme(axis.text.x = element_text(angle = 90, vjust = .35, hjust=1)) +
-  theme(axis.title.x=element_blank(),axis.title.y=element_blank(),axis.ticks = element_blank()) +
-  theme(axis.text.y = element_text(face="bold")) +
-  theme(legend.key.size = unit(.5, 'cm'), #change legend key size
-        legend.key.height = unit(.5, 'cm'), #change legend key height
-        legend.key.width = unit(.5, 'cm'), #change legend key width
-        legend.title = element_text(size=14, face= "bold"), #change legend title font size
-        legend.text = element_text(size=10, face = "bold")) +#change legend text font size
-  theme(legend.title.align = 0.5,
-        legend.direction = "vertical",
-        legend.box.just = "center")+
-  theme(panel.border = element_blank())+
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(panel.background = element_blank())
-
-
-
-level_order <- c('Vitamin A met.', 'Pentose and glucuronate met.', 'Serotonin and melatonin synth.', 'Xenobiotics met.', 'Tryptophan met.', 'Glucocorticoid synth.', 'Ether lipid met.', 'Androgen met.')
-
-
-
-ggplot(TaskStackLiverTask, aes(Subsys, ind, fill= cut(-values,breaks = seq(from = 2.5, to = -2.5, length.out = 12), labels = seq(from = 2.5, to = -2.5, length.out = 11)))) + 
-  geom_tile() +
-  scale_fill_manual(drop = F, values = c("#700101","#e60202","#f06b6b","#f8b8b8","#fbd5d5","white","#c1c6f8","#949cf3","#606ced","#0013e3","#010a6e"), name = "Task Score")+
-  theme(axis.text.y = element_text(size = 8, face = "bold")) +
-  theme(axis.text.x = element_text(size = 10, face = "bold")) +
-  coord_flip() +
-  theme(axis.text.x=element_blank(), legend.position="none") +
-  theme(axis.title.y=element_blank(),axis.ticks = element_blank()) +
-  theme(axis.text.y = element_text(face="bold", size = 18)) +
-  theme(panel.border = element_blank())+
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(panel.background = element_blank()) + xlab("Subsystems") + ylab("Drugs") +ggtitle("Treatment Difference Task Scores")+
-  theme(axis.text = element_text(size = 26)) +
-  theme(axis.title = element_text(size = 26, face = "bold")) +
-  theme(plot.title = element_text(size = 26,face = "bold"))
-
-ggplot(TaskStackLiverTask, aes(factor(Subsys, level = level_order), ind, fill= cut(-values,breaks = seq(from = 2.5, to = -2.5, length.out = 12), labels = seq(from = 2.5, to = -2.5, length.out = 11)))) + 
-  geom_tile() +
-  scale_fill_manual(drop = F, values = c("#700101","#e60202","#f06b6b","#f8b8b8","#fbd5d5","white","#c1c6f8","#949cf3","#606ced","#0013e3","#010a6e"), name = "Task Score")+
-  theme(axis.text.y = element_text(size = 8, face = "bold")) +
-  theme(axis.text.x = element_text(size = 10, face = "bold")) +
-  coord_flip() +
-  theme(axis.text.x=element_blank(), legend.position="none") +
-  theme(axis.title.y=element_blank()) +
-  theme(axis.text.y = element_text(face="bold", size = 18)) +
-  theme(axis.ticks.y = element_blank())+
-  theme(panel.border = element_blank())+
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(panel.background = element_blank()) + xlab("Subsystems") + ylab("Drugs") +ggtitle("Treatment Difference Task Scores")+
-  theme(axis.text = element_text(size = 26)) +
-  theme(axis.title = element_text(size = 26, face = "bold")) +
-  theme(plot.title = element_text(size = 26,face = "bold"))
-
-
-
-
-
-
-ggplot(TaskStackLiverTask, aes(ind, Subsys, fill= cut(-values,breaks = seq(from = 2.5, to = -2.5, length.out = 12), labels = seq(from = 2.5, to = -2.5, length.out = 11)))) + 
-  geom_tile() +scale_x_discrete(labels=rep("-", nrow(Names)))+
-  scale_fill_manual(drop = F, values = c("#700101","#e60202","#f06b6b","#f8b8b8","#fbd5d5","white","#c1c6f8","#949cf3","#606ced","#0013e3","#010a6e"), name = "Task Score")+
-  theme(axis.text.x = element_text(size = 10, face = "bold")) +
-  coord_flip() +
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
-  theme(axis.title.x=element_blank(),axis.ticks = element_blank()) +
-  theme(legend.key.size = unit(.5, 'cm'), #change legend key size
-        legend.key.height = unit(.5, 'cm'), #change legend key height
-        legend.key.width = unit(.5, 'cm'), #change legend key width
-        legend.title = element_text(size=14, face= "bold"), #change legend title font size
-        legend.text = element_text(size=10, face = "bold")) +#change legend text font size
-  theme(legend.title.align = 0.5,
-        legend.direction = "vertical",
-        legend.box.just = "center")+
-  theme(panel.border = element_blank())+
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(panel.background = element_blank()) + xlab("Drugs") + theme(axis.title.y = element_text(size = 20, face = "bold")) 
-
-
-
-ggplot(TaskStackLipidTask, aes(ind, Subsys, fill= cut(-values,breaks = seq(from = 2.5, to = -2.5, length.out = 12), labels = seq(from = 2.5, to = -2.5, length.out = 11)))) + 
-  geom_tile() +scale_x_discrete(labels=rep("-", nrow(Names)))+
-  scale_fill_manual(drop = F, values = c("#700101","#e60202","#f06b6b","#f8b8b8","#fbd5d5","white","#c1c6f8","#949cf3","#606ced","#0013e3","#010a6e"), name = "Task Score")+
-  theme(axis.text.x = element_text(size = 10, face = "bold")) +
-  coord_flip() +
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
-  theme(axis.title.x=element_blank(),axis.ticks = element_blank()) +
-  theme(legend.key.size = unit(.5, 'cm'), #change legend key size
-        legend.key.height = unit(.5, 'cm'), #change legend key height
-        legend.key.width = unit(.5, 'cm'), #change legend key width
-        legend.title = element_text(size=14, face= "bold"), #change legend title font size
-        legend.text = element_text(size=10, face = "bold")) +#change legend text font size
-  theme(legend.title.align = 0.5,
-        legend.direction = "vertical",
-        legend.box.just = "center")+
-  theme(panel.border = element_blank())+
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(panel.background = element_blank()) + xlab("\n\n\nDrugs") + theme(axis.title.y = element_text(size = 20, face = "bold")) 
 
 ```
-
-
-
-
-
-
-
