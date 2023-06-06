@@ -13,18 +13,24 @@ rm(list = ls())
 ```{r cars}
 library(readxl)
 
+# Load in data frome AERS
 samps = read_excel('C:/Users/cmoor/Documents/Papin Lab/Drug Search/AERS.xlsx', col_names = F)
 
+# Load in overall AERS
 UnfilteredAERS = read.table(file = 'C:/Users/cmoor/Documents/Papin Lab/Drug Search/aersMineExploreDataSet_3696.tsv', sep = '\t', header = TRUE)
 
-
+# Separate male and female
 MaleTotal = UnfilteredAERS[6,6]
 FemaleTotal = UnfilteredAERS[6,7]
 
+# Remove unneed data
 UnfilteredAERS2 = UnfilteredAERS[-(1:6),]
 
+# Create data frame for blank rows
 storage = data.frame(matrix(NA, nrow = nrow(UnfilteredAERS2), ncol = 1))
 counter = 1
+
+#Loop through rows looking for blanks
 for(i in 1:nrow(UnfilteredAERS2)){
   
   if(UnfilteredAERS2[i,3] == ""){
@@ -37,15 +43,19 @@ for(i in 1:nrow(UnfilteredAERS2)){
   
 }
 
+# Get rid of extra rows
 storage = storage[-(counter:nrow(storage)),]
 
+# Get rid of blank rows
 UnfilteredAERS3 = as.data.frame(UnfilteredAERS2[-storage,])
 
+# Get only important columns and name them
 AERS = as.data.frame(UnfilteredAERS3[,-c(1,2,6,7,8,9,12)])
 colnames(AERS) = c("Adverse Events", "Drug", "Number of Cases", "Male", "Female")
 AERS$Male = as.numeric(AERS$Male)
 AERS$Female = as.numeric(AERS$Female)
 
+# Format data
 AERS$`Number of Cases` = gsub(",","",AERS$`Number of Cases`)
 AERS$`Number of Cases` = as.numeric(AERS$`Number of Cases`)
 
@@ -54,53 +64,45 @@ AERS$`Number of Cases` = as.numeric(AERS$`Number of Cases`)
 
 ```{r Analysis}
 library(ggplot2)
+
+# Find male/female ratio for each drug
 MFRatio = AERS$Male/AERS$Female
 AERS$`Log2 Ratio (M/F)` = log2(MFRatio)
 
+# Remove NAs created
 AERS = AERS[is.na(AERS$`Log2 Ratio (M/F)`) == F,]
 
-hist(AERS$`Log2 Ratio (M/F)`)
-
-Dimorphs = AERS[AERS$`Log2 Ratio (M/F)` <=-2 | AERS$`Log2 Ratio (M/F)` >=2,]
-
-order(AERS$`Log2 Ratio (M/F)`, decreasing = T)
 
 ```
 
 ```{r vis}
 library(ggplot2)
 
+# Order ratios
 orderind = order(AERS$`Log2 Ratio (M/F)`, decreasing = T)
 
+# Plot
 ggplot(AERS, aes(x=Drug[orderind], y=`Log2 Ratio (M/F)`[orderind])) + 
   geom_boxplot() +
   coord_flip()
 
+# Make data frame with drug and ratio
 drugorder = as.data.frame(cbind(AERS$Drug[orderind], AERS$`Log2 Ratio (M/F)`[orderind]))
 
-
+# Only take drugs with >100000 reports and redo
 prunedAERS = AERS[AERS$`Number of Cases`>100000,]
 orderind = order(prunedAERS$`Log2 Ratio (M/F)`, decreasing = T)
 drugorder = as.data.frame(cbind(prunedAERS$Drug[orderind], prunedAERS$`Log2 Ratio (M/F)`[orderind]))
 
+# Make factors for male and female biased drugs
 drugorder$V1 = factor(drugorder$V1, levels = drugorder$V1)
 drugorder$Dimorphic = "Male-biased"
 drugorder$Dimorphic[drugorder$V2<0] = "Female-biased"
 
+# Remove repeat
 drugorder = drugorder[-4,]
 
-ggplot(drugorder, aes(x=V1, y=as.numeric(V2), fill = Dimorphic)) + 
-  geom_bar(stat = 'identity') +
-  coord_flip() +
-  scale_y_continuous(limits = c(-2.5,2.5))+ xlab("Drugs") + ggtitle("FDA Adverse Event Reporting System (>100000 Reports)") +
-  theme(plot.title = element_text(hjust = 0.5))+
-  theme(axis.text = element_text(size = 16)) +
-  theme(axis.title = element_text(size = 20)) +
-  theme(plot.title = element_text(size = 20)) +
-  theme(legend.text = element_text(size = 16)) +
-  theme(legend.title = element_text(size = 18)) + ylab("Log2 Fold Change (M/F)") +theme(plot.title = element_text(face = "bold")) +
-  scale_fill_brewer(palette="Set2")
-
+# Plot
 ggplot(drugorder, aes(x=V1, y=as.numeric(V2), fill = Dimorphic)) + 
   geom_bar(stat = 'identity') +
   coord_flip() +
