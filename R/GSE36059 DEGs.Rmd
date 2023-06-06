@@ -50,13 +50,15 @@ boxplot(exprs(gse_data))
 ```
 
 ```{r analyze}
-
+# Only take control samples
 control_data = gse_data[,grep("non-rejecting",gse_data$title, ignore.case = T)]
 
+# Load in transcript names
 gset <- getGEO("GSE36059", GSEMatrix =TRUE, getGPL=FALSE)
 if (length(gset) > 1) idx <- grep("GPL570", attr(gset, "names")) else idx <- 1
 gset <- gset[[idx]]
 
+# Translate from transcript ID to ENSEMBL ID
 mart <- useMart("ENSEMBL_MART_ENSEMBL")
 mart <- useDataset("hsapiens_gene_ensembl", mart)
 annotLookup <- getBM(
@@ -69,24 +71,32 @@ annotLookup <- getBM(
   filter = "affy_hg_u133_plus_2",
   values = rownames(exprs(gset)), uniqueRows=TRUE)
 
+# Find USP9Y levels for each sample
 USP9Ylevels = as.data.frame(control_data@assayData$exprs[grep("228492_at", rownames(control_data@assayData$exprs)),]) #USP9Y - GENE NAME
+# Check distribution
 hist(USP9Ylevels[,1], main = "USP9Y Expression Levels (Kidney)", xlab = "USP9Y")
-#sd(SRYlevels[,1])
+
+# Find number of samples with this USP9Y level
 length(USP9Ylevels[USP9Ylevels[,1] < mean(USP9Ylevels[,1]) - sd(USP9Ylevels[,1]),])
 
+# Assign male and female based on USP9Y level
 control_data$gender[USP9Ylevels[,1] < mean(USP9Ylevels[,1]) - sd(USP9Ylevels[,1])] = "Female"
 control_data$gender[USP9Ylevels[,1] > mean(USP9Ylevels[,1]) + sd(USP9Ylevels[,1])] = "Male"
+
+# Create gender vector
 genderdata = control_data[,!is.na(control_data$gender)]
 gse_data = genderdata
 ```
 
 ```{r real analyze}
 
+# Assign male and female vectors
 gender_state <- data.frame(gse_data$gender) %>% 
   mutate(Male = grepl("Male", gse_data.gender), 
          Female = grepl("Female", gse_data.gender)) %>% 
   mutate(Summary = ifelse(Male == FALSE & Female ==TRUE, "Female", ifelse(Male == TRUE & Female == FALSE, "Male", NA)))
 
+# Create contrast matrix
 design <- model.matrix(~0 + factor(gender_state$Summary))
 colnames(design) <- c("Male","Female")
 contrast.matrix <- makeContrasts(Male - Female, levels = design)
@@ -98,7 +108,7 @@ contrast.matrix <- makeContrasts(Male - Female, levels = design)
 library(genefilter)
 gse_data_filter <- varFilter(gse_data)
 
-
+# Assign column names and remove NAs
 gene.data <- annotLookup
 colnames(gene.data) <- c('ID','ENSEMBL', 'GENETYPE','GENENAME')
 gene.data <- gene.data %>% 
@@ -140,24 +150,30 @@ all.results <- all.results %>%
 all.data <- all.results
 colnames(all.data)[1] <- 'GENE.NAME'
 
+
+# See how many DEGs are in male and female
 all.data %>% group_by(Male) %>% dplyr::count()
 all.data %>% group_by(Female) %>% dplyr::count()
 
+# Write to csv
 write.table(all.data, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Degs/GSE36059_DEGs.csv", 
             col.names = TRUE, row.names = FALSE, sep = ",")
 
 # Determine how many DEGs map to the model
 genes_in_model <- openxlsx::read.xlsx("C:/Users/cmoor/Documents/Papin Lab/Human1/Human-GEM.xlsx", sheet = 4)
 
-
+# Map model genes to DEGs
 model.genes.data <- genes_in_model %>% 
   inner_join(all.data, by = c("NAME" = "ENSEMBL"))
 
+# Clean up data frame
 model.genes.data = model.genes.data[,-c(1,3,4,5,7)]
 
+# Write to csv
 write.table(model.genes.data, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Degs/Human1_GSE36059_DEGs.csv", 
             col.names = TRUE, row.names = FALSE, sep = ",")
 
+# See how many model genes are DEGs in male and female
 model.genes.data %>% group_by(Male == 0) %>% dplyr::count()
 model.genes.data %>% group_by(Female == 0) %>% dplyr::count()
 ```
