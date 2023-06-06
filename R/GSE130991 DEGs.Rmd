@@ -12,7 +12,7 @@ rm(list = ls())
 
 ```{r Load}
 # Written by Bonnie Dougherty, 2019-10-02
-# Adapted by Connor Moore 2022-02-2
+# Adapted by Connor Moore 2022-02-02
 
 library(dplyr)
 library(tidyr)
@@ -47,25 +47,56 @@ gse_data <- gse_data[[1]]
 boxplot(exprs(gse_data))
 
 ```
+```{r control for age and statin}
+# Remove statin users
+gse_data_statin = gse_data[,gse_data$`statin treatment:ch1` == "No Statin"]
+
+# Remove under 18 and over 50
+gse_data_statin_age = gse_data_statin[,gse_data_statin$`age:ch1`>18]
+gse_data_statin_age = gse_data_statin[,gse_data_statin$`age:ch1`<50]
+
+# Visualize distribution
+hist(as.numeric(gse_data_statin_age$`age:ch1`[gse_data_statin_age$`gender:ch1` == "Male"]))
+hist(as.numeric(gse_data_statin_age$`age:ch1`[gse_data_statin_age$`gender:ch1` == "Female"]))
+
+# Check mean and sd of male and female populations
+mean(as.numeric(gse_data_statin_age$`age:ch1`[gse_data_statin_age$`gender:ch1` == "Male"]))
+sd(as.numeric(gse_data_statin_age$`age:ch1`[gse_data_statin_age$`gender:ch1` == "Male"]))
+
+mean(as.numeric(gse_data_statin_age$`age:ch1`[gse_data_statin_age$`gender:ch1` == "Female"]))
+sd(as.numeric(gse_data_statin_age$`age:ch1`[gse_data_statin_age$`gender:ch1` == "Female"]))
+# Comparable
+
+
+# Rename variable
+gse_data = gse_data_statin_age
+```
+
+
 
 ```{r Analyze}
+library(biomaRt)
 
+# Rename male/female vector
 gse_data$gender = gse_data$`gender:ch1`
 
+# Create logical vectors for male or female
 gender_state <- data.frame(gse_data$gender) %>% 
   mutate(Male = grepl("Male", gse_data.gender), 
          Female = grepl("Female", gse_data.gender)) %>% 
   mutate(Summary = ifelse(Male == TRUE, "Male", ifelse(Female == TRUE, "Female", "")))
 
+# Create a contrast matrix between male and female
 design <- model.matrix(~0 + factor(gender_state$Summary))
 colnames(design) <- c("Male","Female")
 contrast.matrix <- makeContrasts(Male - Female, levels = design)
 
-
+# Load data for transcript names
 gset <- getGEO("GSE130991", GSEMatrix =TRUE, getGPL=FALSE)
 if (length(gset) > 1) idx <- grep("GPL20265", attr(gset, "names")) else idx <- 1
 gset <- gset[[idx]]
 
+# Translate tranascript ids to ensembl ids
 mart <- useMart("ENSEMBL_MART_ENSEMBL")
 mart <- useDataset("hsapiens_gene_ensembl", mart)
 annotLookup <- getBM(
@@ -84,6 +115,8 @@ annotLookup <- getBM(
 library(genefilter)
 gse_data_filter <- varFilter(gse_data)
 
+
+# Name columns and remove NAs
 gene.data <- annotLookup
 colnames(gene.data) <- c('ID','ENSEMBL', 'GENETYPE','GENENAME')
 gene.data <- gene.data %>% 
@@ -109,11 +142,10 @@ lmfit.results <- data.frame(ID = gse.data.process$probes$ID,
                             decideTests(lmfit.cont.ebayes, adjust.method = "fdr", p.value = 0.1))
 colnames(lmfit.results) <- c('ID','Male/Female')
 
-lmfit.results <- left_join(lmfit.results, testResults, by = c("ID" = "ID")) #%>% 
-#  dplyr::select('ID', 'Male/Female')
-#colnames(lmfit.results) <- c('ID', 'Male/Female')
+lmfit.results <- left_join(lmfit.results, testResults, by = c("ID" = "ID"))
 
-
+# Rename transcript names for ease
+lmfit.results$ID = gsub("hg.1", "hg",lmfit.results$ID)
 all.results <- full_join(gene.data, lmfit.results)
 all.results <- all.results %>% 
   filter(!(is.na(ENSEMBL))) %>%
@@ -128,10 +160,11 @@ all.results <- all.results %>%
 all.data <- all.results
 colnames(all.data)[1] <- 'GENE.NAME'
 
+# See how many DEGs in each sex
 all.data %>% group_by(Male) %>% dplyr::count()
 all.data %>% group_by(Female) %>% dplyr::count()
 
-write.table(all.data, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Degs/GSE130991_DEGs.csv", 
+write.table(all.data, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Degs/GSE130991_DEGs_18-50_No_Statin.csv", 
             col.names = TRUE, row.names = FALSE, sep = ",")
 
 # Determine how many DEGs map to the model
@@ -140,107 +173,18 @@ genes_in_model <- openxlsx::read.xlsx("C:/Users/cmoor/Documents/Papin Lab/Human1
 model.genes.data <- genes_in_model %>% 
   inner_join(all.data, by = c("NAME" = "ENSEMBL"))
 
-model.genes.data = model.genes.data[,-c(1,3,4,5,7)]
 
-write.table(model.genes.data, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Degs/Human1_GSE130991_DEGs.csv", 
+# Write DEGs in model to csv for TIDEs
+write.table(model.genes.data, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Degs/Human1_GSE130991_DEGs_18-50_No_Statin.csv", 
             col.names = TRUE, row.names = FALSE, sep = ",")
 
+# See how many DEGs in model are upregulated in each sex
 model.genes.data %>% group_by(Male == 0) %>% dplyr::count()
 model.genes.data %>% group_by(Female == 0) %>% dplyr::count()
 
 ```
 
-```{r old}
 
-# Original length
-colnames(gene.data) = c("ID", "gene_assignment")
-all.results <- full_join(gene.data, lmfit.results)
-all.results <- all.results %>% 
-  filter(!(is.na(gene_assignment))) %>%
-  filter(!(ID == "---"))
-
-idx = grep("///", all.results$gene_assignment)
-idx2 = idx + 1
-
-all.results = all.results[idx2,]
-all.results = unique(all.results)
-
-# Group results
-all.results <- all.results %>% 
-  group_by(gene_assignment) %>% 
-  mutate(Male = ifelse(`Male/Female` < 0, 1, 0), 
-         Female = ifelse(`Male/Female` > 0, 1, 0))
-
-all.data <- all.results
-colnames(all.data)[1] <- 'GENE.NAME'
-
-all.data %>% group_by(Male) %>% dplyr::count()
-all.data %>% group_by(Female) %>% dplyr::count()
-
-#write.table(all.data, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Degs/GSE130991_DEGs.csv", 
-#            col.names = TRUE, row.names = FALSE, sep = ",")
-
-# Determine how many DEGs map to the model
-genes_in_model <- openxlsx::read.xlsx("C:/Users/cmoor/Documents/Papin Lab/Human1/Human-GEM.xlsx", sheet = 4) %>%
-  dplyr::select(c(MIRIAM, NAME))
-genes_in_model <- data.frame(sapply(genes_in_model, function(x) gsub("\'", "", x)))
-colnames(genes_in_model) <- c('GENE.NAME', "ENSEMBL")
-
-```
-
-```{r genes}
-FilteredGPL = read.table(file = 'C:/Users/cmoor/Documents/Papin Lab/Human1/Probeset/FilteredGPL.csv', sep = ',', header = TRUE)
-
-
-all.data$GENE.NAME = gsub("hg.1", "hg",all.data$GENE.NAME)
-
-colnames(FilteredGPL) = c("Idx","ENSEMBL", "GENE.NAME")
-DEGswithNA = full_join(all.data, FilteredGPL)
-
-
-DEGswithNA2 = DEGswithNA[!is.na(DEGswithNA$ENSEMBL),]
-DEGswithNA3 = full_join(DEGswithNA2, genes_in_model, by ="ENSEMBL")
-DEGswithNA3 = DEGswithNA3[!duplicated(DEGswithNA3$ENSEMBL),]
-DEGswithNA3$logFC[DEGswithNA3$Male == 0 & DEGswithNA3$Female == 0] = 0
-DEGswithNA3$logFC[is.na(DEGswithNA3$logFC)] = 0
-
-
-DEGs = DEGswithNA3[!duplicated(DEGswithNA3$ENSEMBL),]
-DEGs = DEGs[-c(2,12,14)]
-
-
-
-write.table(DEGs, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Degs/Human1_DEGs.csv", 
-            col.names = TRUE, row.names = FALSE, sep = ",")
-```
-
-```{r next}
-model.genes.data = data.frame(matrix(0, nrow = nrow(all.data), ncol = 5))
-
-counter = 1
-for(i in 1:length(all.data$gene_assignment)){
-  
-  if(length(grep(all.data$gene_assignment[i], genes_in_model$GENE.NAME)) != 0){
-    
-    model.genes.data[counter,] = all.data[i,]
-    counter = counter + 1
-
-    
-  }
-  
-  
-}
-
-colnames(model.genes.data) = colnames(all.data)
-colnames(model.genes.data)[6] = "ENSEMBL"
-
-#write.table(model.genes.data, file = "C:/Users/cmoor/Documents/Papin Lab/Human1/Degs/Human1_DEGs.csv", 
-#            col.names = TRUE, row.names = FALSE, sep = ",")
-
-
-model.genes.data %>% group_by(Male == 0) %>% dplyr::count()
-model.genes.data %>% group_by(Female == 0) %>% dplyr::count()
-```
 
 
 
