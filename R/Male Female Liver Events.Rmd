@@ -12,31 +12,37 @@ rm(list = ls())
 ```{r loadin}
 library(readxl)
 
-
+# Load male/female report infomration
 samps = read_excel('C:/Users/cmoor/Documents/Class/BME 6311/Project 1/Project 1 AERS.xlsx', col_names = T)
 
+# Get only important data and rename
 ProjData = samps[, 2:6]
 rownames(ProjData) = samps$...1
 
 ```
 
 ```{r combine}
-
+# Make empty data frame
 combined = data.frame(matrix(NA, nrow = nrow(ProjData), ncol = 2))
 
+# Make male and female rows
 combined[,1] = (ProjData$`Male Young Adult`+ProjData$`Male Adult`)/ProjData$`Total Reports`
 combined[,2] = (ProjData$`Female Young Adult`+ProjData$`Female Adult`)/ProjData$`Total Reports`
 
+# Name rows and columns
 rownames(combined) = samps$...1
 colnames(combined) = c("Male", "Female")
 
+# Set up boxplot df
 boxp = data.frame(matrix(NA, nrow = 2*nrow(ProjData), ncol = 2))
 
+# Assign male and female rows
 boxp[1:nrow(combined),1] = combined$Male
 boxp[1:nrow(combined),2] = "Male"
 boxp[(nrow(combined)+1):nrow(boxp),1] = combined$Female
 boxp[(nrow(combined)+1):nrow(boxp),2] = "Female"
 
+# Rename
 colnames(boxp) = c("Data", "Sex")
 
 ```
@@ -45,7 +51,7 @@ colnames(boxp) = c("Data", "Sex")
 library(ggplot2)
 library(ggsignif)
 
-
+# Plot
 ggplot(boxp, aes(x=as.factor(Sex), y=Data*100, fill=as.factor(Sex))) +
 geom_boxplot(outlier.shape = NA) +
   geom_signif(comparisons = list(c("Male", "Female")), 
@@ -66,6 +72,7 @@ panel.background = element_blank(), axis.line = element_line(colour = "black"))
 ```{r with time}
 library(ggplot2)
 
+# Add data over time
 ggplot(combined, aes(x = rownames(combined))) +
   geom_point(aes(y = 100*Male, color = "Male", size = 3))+
   geom_point(aes(y = 100*Female, color = "Female", size = 3))+
